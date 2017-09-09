@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context="com.example.wageesha.fyp.FourthActivity">
+
+    <Button
+        android:id="@+id/buttonBeatPlay"
+        android:layout_width="350dp"
+        android:layout_height="220dp"
+        android:layout_marginTop="20dp"
+        android:layout_centerHorizontal="true"
+        android:text="Beat Play"
+        />
+
+    <Button
+        android:id="@+id/buttonFreePlay"
+        android:layout_width="350dp"
+        android:layout_height="220dp"
+        android:layout_below="@+id/buttonBeatPlay"
+        android:layout_marginTop="30dp"
+        android:layout_centerHorizontal="true"
+        android:text="Free Play"
+        />
+
+</RelativeLayout>
