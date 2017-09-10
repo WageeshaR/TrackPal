@@ -29,6 +29,7 @@ public class FifthActivity extends Activity {
     private Context context;
 
     private Button start_button;
+    private Button stop_button;
 
     private static final int RECORDER_SAMPLERATE = 16000;
     private static final int RECORDER_CHANNELS = AudioFormat.CHANNEL_IN_MONO;
@@ -36,7 +37,14 @@ public class FifthActivity extends Activity {
     private AudioRecord recorder = null;
 
     private Thread recordingThread = null;
+    private Thread pitchThread = null;
     private boolean isRecording = false;
+
+    private int[] amdf_array;
+    private int[] acf_array;
+    private short[] data;
+    private double pitch;
+    private double i = 0;
 
     private static final int SAMPLE_LAG = 100;
 
@@ -48,6 +56,7 @@ public class FifthActivity extends Activity {
         String text;
 
         start_button = (Button) findViewById(R.id.buttonStart);
+        stop_button = (Button) findViewById(R.id.buttonStop);
 
         cont_view = (TextView) findViewById(R.id.viewContDisplay);
         pitch_view = (TextView) findViewById(R.id.viewPitchDisplay);
@@ -70,6 +79,12 @@ public class FifthActivity extends Activity {
                 startPlaying();
             }
         });
+        stop_button.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                stopPlaying();
+            }
+        });
 
     }
 
@@ -81,7 +96,9 @@ public class FifthActivity extends Activity {
         recorder = new AudioRecord(MediaRecorder.AudioSource.MIC,
                 RECORDER_SAMPLERATE, RECORDER_CHANNELS,
                 RECORDER_AUDIO_ENCODING, BufferElements2Rec * BytesPerElement);
+
         recorder.startRecording();
+
         isRecording = true;
 
         recordingThread = new Thread(new Runnable() {
@@ -90,34 +107,58 @@ public class FifthActivity extends Activity {
                 processAudio();
             }
         });
+        recordingThread.start();
+    }
+
+    private void stopPlaying(){
+        if (null != recorder) {
+            isRecording = false;
+            recorder.stop();
+            recorder.release();
+            recorder = null;
+            recordingThread = null;
+            /*runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    pitch_view.setText(Double.toString(i));
+                }
+            });*/
+        }
     }
 
     private void processAudio(){
-        short[] data = new short[BufferElements2Rec];
+        data = new short[BufferElements2Rec];
 
-        int amdf_array[] = new int[SAMPLE_LAG];
-        int acf_array[] = new int[SAMPLE_LAG];
-        int multplied[] = new int[SAMPLE_LAG];
-        double pitch, i = 0;
+        amdf_array = new int[SAMPLE_LAG];
+        acf_array = new int[SAMPLE_LAG];
+
 
         while (isRecording){
 
-            i++;
+            i += 1;
 
             recorder.read(data, 0, BufferElements2Rec);
-
-            amdf_array = amdf(data, RECORDER_SAMPLERATE, SAMPLE_LAG);
-
-            acf_array = acf(data, RECORDER_SAMPLERATE, SAMPLE_LAG);
-
-            pitch = detectPitch(amdf_array, acf_array, SAMPLE_LAG);
 
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    pitch_view.setText("Hello");
+                    pitch_view.setText(Double.toString(pitch));
                 }
             });
+
+            pitchThread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+
+                    amdf_array = amdf(data, RECORDER_SAMPLERATE, SAMPLE_LAG);
+
+                    acf_array = acf(data, RECORDER_SAMPLERATE, SAMPLE_LAG);
+
+                    pitch = detectPitch(amdf_array, acf_array, SAMPLE_LAG);
+
+                }
+            });
+            pitchThread.start();
 
         }
     }
