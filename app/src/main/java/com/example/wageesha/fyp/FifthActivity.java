@@ -117,12 +117,6 @@ public class FifthActivity extends Activity {
             recorder.release();
             recorder = null;
             recordingThread = null;
-            /*runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    pitch_view.setText(Double.toString(i));
-                }
-            });*/
         }
     }
 
