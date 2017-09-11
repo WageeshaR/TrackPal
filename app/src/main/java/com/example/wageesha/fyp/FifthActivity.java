@@ -38,11 +38,16 @@ public class FifthActivity extends Activity {
 
     private Thread recordingThread = null;
     private Thread pitchThread = null;
+    private Thread amdfThread = null;
+    private Thread acfThread = null;
     private boolean isRecording = false;
 
-    private int[] amdf_array;
-    private int[] acf_array;
-    private short[] data;
+    private int BufferElements2Rec = 2000;
+    private int BytesPerElement = 2;
+
+    private int[] amdf_array = new int[SAMPLE_LAG];
+    private int[] acf_array = new int[SAMPLE_LAG];
+    private short[] data = new short[BufferElements2Rec];
     private double pitch;
     private double i = 0;
 
@@ -88,8 +93,6 @@ public class FifthActivity extends Activity {
 
     }
 
-    private int BufferElements2Rec = 2000;
-    private int BytesPerElement = 2;
 
     private void startPlaying(){
 
@@ -121,11 +124,6 @@ public class FifthActivity extends Activity {
     }
 
     private void processAudio(){
-        data = new short[BufferElements2Rec];
-
-        amdf_array = new int[SAMPLE_LAG];
-        acf_array = new int[SAMPLE_LAG];
-
 
         while (isRecording){
 
@@ -140,18 +138,47 @@ public class FifthActivity extends Activity {
                 }
             });
 
-            pitchThread = new Thread(new Runnable() {
+            amdfThread = new Thread(new Runnable() {
                 @Override
                 public void run() {
 
-                    amdf_array = amdf(data, RECORDER_SAMPLERATE, SAMPLE_LAG);
+                    try {
+                        amdf_array = amdf(data, RECORDER_SAMPLERATE, SAMPLE_LAG);
 
-                    acf_array = acf(data, RECORDER_SAMPLERATE, SAMPLE_LAG);
+                        Thread.sleep(200);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+
+                }
+            });
+
+            acfThread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+
+                    try {
+                        acf_array = acf(data, RECORDER_SAMPLERATE, SAMPLE_LAG);
+
+                        Thread.sleep(200);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+
+                }
+            });
+
+            pitchThread = new Thread(new Runnable() {
+                @Override
+                public void run() {
 
                     pitch = detectPitch(amdf_array, acf_array, SAMPLE_LAG);
 
                 }
             });
+
+            amdfThread.start();
+            acfThread.start();
             pitchThread.start();
 
         }
@@ -199,6 +226,8 @@ public class FifthActivity extends Activity {
 
         int sum;
 
+        int[] temp = new int[frame_length];
+
 
         // AMDF
 
@@ -206,11 +235,13 @@ public class FifthActivity extends Activity {
 
             sum = 0;
 
+            System.arraycopy(int_input, i, temp, 0, frame_length);
+
             // creating abs_frame and summing values
 
             for (int j=0; j<frame_length; j++){
 
-                abs_frame[j] = Math.abs(shift_frame[j] - Arrays.copyOfRange(int_input, i, i+frame_length)[j]);
+                abs_frame[j] = Math.abs(shift_frame[j] - temp[j]);
 
                 sum += abs_frame[j];
 
@@ -265,17 +296,21 @@ public class FifthActivity extends Activity {
 
         int sum;
 
+        int[] temp = new int[frame_length];
+
         // ACF
 
         for (int i=0; i<sample_lag; i++){
 
             sum = 0;
 
+            System.arraycopy(int_input, i, temp, 0, frame_length);
+
             // creating abs_frame
 
             for (int j=0; j<frame_length; j++){
 
-                abs_frame[j] = Math.abs(shift_frame[j]*Arrays.copyOfRange(int_input, i, i+frame_length)[j]);
+                abs_frame[j] = Math.abs(shift_frame[j]*temp[j]);
 
                 sum += abs_frame[j];
 
@@ -292,6 +327,15 @@ public class FifthActivity extends Activity {
 
     private double detectPitch(int[] amdf_frame, int[] acf_frame, int lag){
 
+        double[] temp_acf = new double[acf_frame.length];
+
+        double[] temp_amdf = new double[amdf_frame.length];
+
+        for (int i=0; i<lag; i++){
+            temp_acf[i] = acf_frame[i];
+            temp_amdf[i] = amdf_frame[i];
+        }
+
         Arrays.sort(acf_frame);
 
         Arrays.sort(amdf_frame);
@@ -300,43 +344,62 @@ public class FifthActivity extends Activity {
 
         int max_amdf = amdf_frame[amdf_frame.length - 2];
 
-        int[] multiplied = new int[lag];
+        double[] multiplied = new double[lag];
 
-        for (int i=0; i<lag; i++){
-            acf_frame[i] = acf_frame[i]/max_acf;
-        }
+        if (max_acf == 0 || max_amdf == 0) return 5;
 
-        for (int i=0; i<lag; i++){
-            amdf_frame[i] = 1/amdf_frame[i];
-            amdf_frame[i] = amdf_frame[i]/max_amdf;
-            multiplied[i] = amdf_frame[i]*acf_frame[i];
-        }
+        else {
+            for (int i = 0; i < lag; i++) {
+                temp_acf[i] = temp_acf[i] / max_acf;
+            }
 
-        boolean flag = false;
-        int temp = multiplied[0];
-        int[] peaks = new int[2];
-        peaks[0] = 0;
+            for (int i = 0; i < lag; i++) {
 
-        for (int i=1; i<multiplied.length; i++){
-            if (flag == true){
-                if (multiplied[i] < temp && temp - multiplied[i] > 0.05){
-                    peaks[2] = i;
-                    break;
+                if (temp_amdf[i] == 0) continue;
+
+                else temp_amdf[i] = 1 / temp_amdf[i];
+            }
+
+            double[] dup = temp_amdf;
+
+            Arrays.sort(dup);
+
+            double max_temp_amdf = dup[dup.length - 2];
+
+            for (int i = 0; i < lag; i++){
+
+                temp_amdf[i] = temp_amdf[i] / max_temp_amdf;
+
+                multiplied[i] = temp_amdf[i] * temp_acf[i];
+            }
+
+            boolean flag = false;
+
+            double temp = multiplied[0];
+
+            int[] peaks = new int[2];
+
+            peaks[0] = 0;
+
+            for (int i = 1; i < multiplied.length; i++) {
+                if (flag == true) {
+                    if (multiplied[i] < temp && temp - multiplied[i] > 0.05) {
+                        peaks[1] = i;
+                        break;
+                    }
                 }
+
+                if (multiplied[i] > temp) {
+                    flag = true;
+                } else flag = false;
+
+                temp = multiplied[i];
             }
 
-            if (multiplied[i] > temp){
-                flag = true;
-            }
+            double pitch_in_hertz = RECORDER_SAMPLERATE / (peaks[1] - peaks[0] - 1);
 
-            else flag = false;
-
-            temp = multiplied[i];
+            return pitch_in_hertz;
         }
-
-        double pitch_in_hertz = 16000/(peaks[1] - peaks[0] - 1);
-
-        return pitch_in_hertz;
 
     }
 }
