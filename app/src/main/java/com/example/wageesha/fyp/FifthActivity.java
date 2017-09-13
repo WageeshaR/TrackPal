@@ -46,7 +46,7 @@ public class FifthActivity extends Activity {
     private int BytesPerElement = 2;
 
     private int[] amdf_array = new int[SAMPLE_LAG];
-    private int[] acf_array = new int[SAMPLE_LAG];
+    private long[] acf_array = new long[SAMPLE_LAG];
     private short[] data = new short[BufferElements2Rec];
     private double pitch;
     private double i = 0;
@@ -131,12 +131,14 @@ public class FifthActivity extends Activity {
 
             recorder.read(data, 0, BufferElements2Rec);
 
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    pitch_view.setText(Double.toString(pitch));
-                }
-            });
+            if (i%4 == 0) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        pitch_view.setText(Double.toString(pitch));
+                    }
+                });
+            }
 
             amdfThread = new Thread(new Runnable() {
                 @Override
@@ -145,7 +147,7 @@ public class FifthActivity extends Activity {
                     try {
                         amdf_array = amdf(data, RECORDER_SAMPLERATE, SAMPLE_LAG);
 
-                        Thread.sleep(200);
+                        Thread.sleep(0);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
@@ -160,7 +162,7 @@ public class FifthActivity extends Activity {
                     try {
                         acf_array = acf(data, RECORDER_SAMPLERATE, SAMPLE_LAG);
 
-                        Thread.sleep(200);
+                        Thread.sleep(0);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
@@ -256,7 +258,7 @@ public class FifthActivity extends Activity {
         return amdf_frame;
     }
 
-    private int[] acf(short input[], int Fs, int sample_lag){
+    private long[] acf(short input[], int Fs, int sample_lag){
 
         // conversion of short array of inputs to int array
 
@@ -269,9 +271,9 @@ public class FifthActivity extends Activity {
         }
 
 
-        // array to store output AMDF values
+        // array to store output ACF values
 
-        int acf_frame[] = new int[sample_lag];
+        long acf_frame[] = new long[sample_lag];
 
 
         // length of array that is to be shifted in time domain
@@ -284,7 +286,7 @@ public class FifthActivity extends Activity {
         int shift_frame[] = new int[frame_length];
 
 
-        // array to store absolute-difference values
+        // array to store absolute-multiplication values
 
         int abs_frame[] = new int[frame_length];
 
@@ -294,7 +296,7 @@ public class FifthActivity extends Activity {
         System.arraycopy(int_input, 0, shift_frame, 0, frame_length);
 
 
-        int sum;
+        long sum;
 
         int[] temp = new int[frame_length];
 
@@ -325,7 +327,7 @@ public class FifthActivity extends Activity {
         return acf_frame;
     }
 
-    private double detectPitch(int[] amdf_frame, int[] acf_frame, int lag){
+    private double detectPitch(int[] amdf_frame, long[] acf_frame, int lag){
 
         double[] temp_acf = new double[acf_frame.length];
 
@@ -340,9 +342,9 @@ public class FifthActivity extends Activity {
 
         Arrays.sort(amdf_frame);
 
-        int max_acf = acf_frame[acf_frame.length - 1];
+        long max_acf = acf_frame[acf_frame.length - 1];
 
-        int max_amdf = amdf_frame[amdf_frame.length - 2];
+        int max_amdf = amdf_frame[amdf_frame.length - 1];
 
         double[] multiplied = new double[lag];
 
@@ -364,7 +366,7 @@ public class FifthActivity extends Activity {
 
             Arrays.sort(dup);
 
-            double max_temp_amdf = dup[dup.length - 2];
+            double max_temp_amdf = dup[dup.length - 1];
 
             for (int i = 0; i < lag; i++){
 
@@ -375,15 +377,15 @@ public class FifthActivity extends Activity {
 
             boolean flag = false;
 
-            double temp = multiplied[0];
+            double temp = multiplied[1];
 
             int[] peaks = new int[2];
 
-            peaks[0] = 0;
+            peaks[0] = 1;
 
-            for (int i = 1; i < multiplied.length; i++) {
+            for (int i = 2; i < multiplied.length; i++) {
                 if (flag == true) {
-                    if (multiplied[i] < temp && temp - multiplied[i] > 0.05) {
+                    if (multiplied[i] < temp && temp - multiplied[i] > 0.001) {
                         peaks[1] = i;
                         break;
                     }
