@@ -6,8 +6,10 @@ import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
 import android.os.Bundle;
+import android.text.method.ScrollingMovementMethod;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.os.Environment;
 import android.content.Context;
@@ -23,10 +25,12 @@ import java.util.Arrays;
 
 public class FifthActivity extends Activity {
 
+    public static final int  INT = 600;
     private TextView cont_view;
     private TextView pitch_view;
     private File file;
     private Context context;
+    private ScrollView cont_scrollview;
 
     private Button start_button;
     private Button stop_button;
@@ -37,21 +41,25 @@ public class FifthActivity extends Activity {
     private AudioRecord recorder = null;
 
     private Thread recordingThread = null;
+    private Thread processingThread = null;
     private Thread pitchThread = null;
     private Thread amdfThread = null;
     private Thread acfThread = null;
     private boolean isRecording = false;
 
-    private int BufferElements2Rec = 2000;
+    private int BufferElements2Rec = 1024;
     private int BytesPerElement = 2;
 
     private int[] amdf_array = new int[SAMPLE_LAG];
     private long[] acf_array = new long[SAMPLE_LAG];
     private short[] data = new short[BufferElements2Rec];
     private double pitch;
-    private double i = 0;
+    private int i = 0;
+    private int count = 0;
+    private long previous_frame_energy = 0;
 
     private static final int SAMPLE_LAG = 100;
+    private static final int FRAME_SIZE = 1024;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,17 +72,36 @@ public class FifthActivity extends Activity {
         stop_button = (Button) findViewById(R.id.buttonStop);
 
         cont_view = (TextView) findViewById(R.id.viewContDisplay);
+        cont_view.setMovementMethod(new ScrollingMovementMethod());
         pitch_view = (TextView) findViewById(R.id.viewPitchDisplay);
 
         cont_view.setBackgroundColor(Color.rgb(255,255,255));
         pitch_view.setBackgroundColor(Color.rgb(255,255,255));
+
+        cont_scrollview = (ScrollView) findViewById(R.id.scrollContDisplay);
 
         text = "C-C-|G-G-|A-A-|G---\n" +
                 "F-F-|E-E-|D-D-|C---\n" +
                 "G-G-|F-F-|E-E-|D---\n" +
                 "G-G-|F-F-|E-E-|D---\n" +
                 "C-C-|G-G-|A-A-|G---\n" +
-                "F-F-|E-E-|D-D-|C---";
+                "F-F-|E-E-|D-D-|C---\n" +
+                "C-C-|G-G-|A-A-|G---\n" +
+                "F-F-|E-E-|D-D-|C---\n" +
+                "G-G-|F-F-|E-E-|D---\n" +
+                "G-G-|F-F-|E-E-|D---\n" +
+                "C-C-|G-G-|A-A-|G---\n" +
+                "F-F-|E-E-|D-D-|C---\n" +
+                "F-F-|E-E-|D-D-|C---\n" +
+                "G-G-|F-F-|E-E-|D---\n" +
+                "G-G-|F-F-|E-E-|D---\n" +
+                "C-C-|G-G-|A-A-|G---\n" +
+                "F-F-|E-E-|D-D-|C---\n" +
+                "C-C-|G-G-|A-A-|G---\n" +
+                "F-F-|E-E-|D-D-|C---\n" +
+                "G-G-|F-F-|E-E-|D---\n" +
+                "G-G-|F-F-|E-E-|D---\n" +
+                "C-C-|G-G-|A-A-|G---";
 
         cont_view.setText(text);
 
@@ -125,20 +152,57 @@ public class FifthActivity extends Activity {
 
     private void processAudio(){
 
+        final short[] temp_buffer = new short[FRAME_SIZE*4];
+        final boolean flag = false;
+
         while (isRecording){
 
             i += 1;
 
-            recorder.read(data, 0, BufferElements2Rec);
+            recorder.read(data, 0, FRAME_SIZE);
 
-            if (i%4 == 0) {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        pitch_view.setText(Double.toString(pitch));
+            processingThread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+
+                    if (i == 4){
+                        previous_frame_energy = energyODF(Arrays.copyOfRange(temp_buffer,2*FRAME_SIZE,3*FRAME_SIZE));
+                        //System.arraycopy(temp_buffer, FRAME_SIZE, temp_buffer, 0, FRAME_SIZE*3);
                     }
-                });
-            }
+
+                    if (i >= 4){
+
+                        System.arraycopy(data, 0, temp_buffer, 3*FRAME_SIZE, FRAME_SIZE);
+
+                        if ((i - 4) % 4 == 0) {
+
+                            if(detectOnsets(Arrays.copyOfRange(temp_buffer,3*FRAME_SIZE,4*FRAME_SIZE), previous_frame_energy)){
+                                cont_view.post(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        cont_scrollview.smoothScrollBy(0,50);
+                                        count += 1;
+                                        amdf_array = amdf(data, RECORDER_SAMPLERATE, SAMPLE_LAG);
+                                        pitch = checkPitch(amdf_array, SAMPLE_LAG);
+                                    }
+                                });
+                            }
+
+                        }
+                        System.arraycopy(temp_buffer, FRAME_SIZE, temp_buffer, 0, FRAME_SIZE*3);
+
+                        previous_frame_energy = energyODF(Arrays.copyOfRange(temp_buffer,3*FRAME_SIZE,4*FRAME_SIZE));
+
+                    }
+
+                    else {
+                        System.arraycopy(data, 0, temp_buffer, (i-1)*FRAME_SIZE, FRAME_SIZE);
+                    }
+
+                }
+            });
+
+            processingThread.start();
 
             amdfThread = new Thread(new Runnable() {
                 @Override
@@ -173,15 +237,57 @@ public class FifthActivity extends Activity {
             pitchThread = new Thread(new Runnable() {
                 @Override
                 public void run() {
+                    try{
+                        Thread.sleep(0);
 
-                    pitch = detectPitch(amdf_array, acf_array, SAMPLE_LAG);
+                        pitch = detectPitch(amdf_array, acf_array, SAMPLE_LAG);
+
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                pitch_view.setText(Double.toString(pitch));
+                                //pitch_view.setText(Math.abs(prev_E - energyODF(buffer))+"  "+ Integer.toString(i));
+                            }
+                        });
+                    }catch (InterruptedException e){
+                        e.printStackTrace();
+                    }
+
+                }
+            });
+
+            //amdfThread.start();
+            //acfThread.start();
+            //pitchThread.start();
+
+
+            /*if (flag == true) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        pitch_view.setText(Integer.toString(i));
+                    }
+                });
+            }
+
+            acfThread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+
+                    try {
+                        acf_array = acf(data, RECORDER_SAMPLERATE, SAMPLE_LAG);
+
+                        Thread.sleep(0);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
 
                 }
             });
 
             amdfThread.start();
             acfThread.start();
-            pitchThread.start();
+            pitchThread.start();*/
 
         }
     }
@@ -348,7 +454,7 @@ public class FifthActivity extends Activity {
 
         double[] multiplied = new double[lag];
 
-        if (max_acf == 0 || max_amdf == 0) return 5;
+        if (max_amdf == 0) return 5;
 
         else {
             for (int i = 0; i < lag; i++) {
@@ -362,7 +468,11 @@ public class FifthActivity extends Activity {
                 else temp_amdf[i] = 1 / temp_amdf[i];
             }
 
-            double[] dup = temp_amdf;
+            double[] dup = new double[temp_amdf.length];
+
+            for (int i=0; i<lag; i++){
+                dup[i] = temp_amdf[i];
+            }
 
             Arrays.sort(dup);
 
@@ -372,7 +482,7 @@ public class FifthActivity extends Activity {
 
                 temp_amdf[i] = temp_amdf[i] / max_temp_amdf;
 
-                multiplied[i] = temp_amdf[i] * temp_acf[i];
+                multiplied[i] = temp_amdf[i];
             }
 
             boolean flag = false;
@@ -398,10 +508,127 @@ public class FifthActivity extends Activity {
                 temp = multiplied[i];
             }
 
-            double pitch_in_hertz = RECORDER_SAMPLERATE / (peaks[1] - peaks[0] - 1);
+            double pitch_in_hertz = RECORDER_SAMPLERATE / (peaks[1] - peaks[0]);
 
             return pitch_in_hertz;
         }
 
     }
+
+    private boolean detectOnsets(final short[] buffer, final long prev_E){
+
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                pitch_view.setText(Boolean.toString(Math.abs(prev_E - energyODF(buffer)) > 1500)+"  "+count+"  "+pitch);
+                //pitch_view.setText(Math.abs(prev_E - energyODF(buffer))+"  "+ Integer.toString(i));
+            }
+        });
+
+        if (Math.abs(prev_E - energyODF(buffer)) > 1500){
+
+            return true;
+
+        }
+
+        else return false;
+
+    }
+
+    private long energyODF(short[] buffer){
+
+        long energy = 0;
+
+        int int_buffer[] = new int[buffer.length];
+
+        for (int i=0; i<buffer.length; i++){
+            int_buffer[i] = buffer[i]*buffer[i];
+            energy += int_buffer[i];
+        }
+
+        return energy/1000000;
+    }
+
+    private double checkPitch(int[] amdf_frame, int lag){
+
+        final double[] temp_amdf = new double[amdf_frame.length];
+
+        for (int i=0; i<lag; i++){
+            temp_amdf[i] = amdf_frame[i];
+        }
+
+        Arrays.sort(amdf_frame);
+
+        int max_amdf = amdf_frame[amdf_frame.length - 1];
+
+        if(max_amdf == 0) return 0;
+
+        else{
+
+            for (int i = 0; i < lag; i++) {
+
+                if (temp_amdf[i] == 0) continue;
+
+                else temp_amdf[i] = 1 / temp_amdf[i];
+            }
+
+            double[] dup = new double[temp_amdf.length];
+
+            for (int i=0; i<lag; i++){
+                dup[i] = temp_amdf[i];
+            }
+
+            double max_temp_amdf = dup[dup.length - 1];
+
+            for (int i = 0; i < lag; i++){
+
+                temp_amdf[i] = temp_amdf[i] / max_temp_amdf;
+            }
+
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        pitch_view.setText(Double.toString(temp_amdf[62]));
+                        //pitch_view.setText(Math.abs(prev_E - energyODF(buffer))+"  "+ Integer.toString(i));
+                    }
+                });
+
+            //if(temp_amdf[62] > 0.5) return true;
+            return temp_amdf[62];
+
+        }
+    }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

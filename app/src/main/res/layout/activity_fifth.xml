@@ -6,25 +6,33 @@
     android:layout_height="match_parent"
     tools:context="com.example.wageesha.fyp.FifthActivity">
 
-    <TextView
-        android:id="@+id/viewContDisplay"
-        android:layout_width="350dp"
-        android:layout_height="320dp"
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="350dp"
         android:layout_centerHorizontal="true"
-        android:layout_marginTop="20dp"
-        android:textAlignment="center"
-        android:textSize="30dp"
-        android:textColor="@android:color/black"/>
+        android:id="@+id/scrollContDisplay">
+
+        <TextView
+            android:id="@+id/viewContDisplay"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="20dp"
+            android:textAlignment="center"
+            android:textSize="30dp"
+            android:textColor="@android:color/black"/>
+
+    </ScrollView>
 
     <TextView
         android:id="@+id/viewPitchDisplay"
         android:layout_width="350dp"
         android:layout_height="40dp"
         android:layout_centerHorizontal="true"
-        android:layout_below="@+id/viewContDisplay"
+        android:layout_below="@+id/scrollContDisplay"
         android:layout_marginTop="10dp"
         android:textAlignment="center"
-        android:textSize="25dp"
+        android:textSize="15dp"
         android:textColor="@android:color/black"/>
 
     <Button
